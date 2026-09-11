@@ -116,7 +116,7 @@ parser.add_option('--ignore-proxy', dest='ignore_proxy', default=False, action='
 parser.add_option('--ignore-sslcert', dest='ignore_sslcert', default=False, action='store_true', help='Ignore ssl certificate (default="false")')
 parser.add_option('--api-url', dest='api_url', type='string', default='/ocs/v2.php/apps/serverinfo/api/v1/info', help='Url of the api (default="/ocs/v2.php/apps/serverinfo/api/v1/info")')
 parser.add_option('--context', dest='context', type='string', help='Webserver context where Nextcloud is running (for example "/mycloud"). It will be prepended to api-url parameter')
-parser.add_option('--tracehttp', dest='tracehttp', default=False, action='store_true', help='Show http protocol traces for debugging (default="true")')
+parser.add_option('--tracehttp', dest='tracehttp', default=False, action='store_true', help='Show http protocol traces for debugging (default="false")')
 
 (options, args) = parser.parse_args()
 
@@ -173,6 +173,13 @@ else:
 # Encode credentials as base64
 credential = base64.b64encode(bytes('%s:%s' % (options.username, options.password), 'ascii'))
 
+def print_headers(headers):
+    sensitive_headers = ('authorization', 'nc-token')
+    for key, value in headers.items():
+        if key.lower() in sensitive_headers:
+            value = '***REDACTED***'
+        print(f"  {key}: {value}")
+
 try:
     # Create the request
     request = urllib.request.Request(url)
@@ -190,8 +197,7 @@ try:
         print(f"HTTP method : {request.get_method()}")
         print(f"URL Target  : {request.full_url}")
         print("Headers:")
-        for key, value in request.headers.items():
-            print(f"  {key}: {value}")
+        print_headers(request.headers)
         print("=" * 40)
 
     # SSL/TLS certificate validation (see: https://stackoverflow.com/questions/19268548/python-ignore-certificate-validation-urllib2)
@@ -218,12 +224,18 @@ try:
         print("=" * 40)
         print(f"HTTP Status : {response.status} {response.reason}")
         print("Response Headers:")
-        for key, value in response.headers.items():
-            print(f"  {key}: {value}")
+        print_headers(response.headers)
         print(f"Response Body : {content}")
         print("=" * 40)
 
 except urllib.error.HTTPError as error:      # User is not authorized (401)
+    if(options.tracehttp):
+        print("=" * 40)
+        print(f"HTTP Status : {error.code} {error.reason}")
+        print("Response Headers:")
+        print_headers(error.headers)
+        print(f"Response Body : {error.read()}")
+        print("=" * 40)
     print('UNKOWN - [WEBREQUEST] {0} {1}'.format(error.code, error.reason))
     sys.exit(3)
 
@@ -342,7 +354,7 @@ if options.check == 'database':
     xml_database_version = str(xml_database.find('version').text)
     xml_database_size = float(xml_database.find('size').text)
 
-    print('OK - Database: {0}, version {1}, size: {2} | database_size={3}'.format(xml_database_type, xml_database_version, calc_size_suffix(xml_database_size), calc_size_nagios(xml_database_size,'')))
+    print('OK - Database: {0}, version {1}, size: {2} | database_size={3}'.format(xml_database_type, xml_database_version, calc_size_suffix(xml_database_size), calc_size_nagios(xml_database_size)))
     sys.exit(0)
 
 # Check the active users
